@@ -12,8 +12,10 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 @SpringBootTest
@@ -302,10 +304,133 @@ class CoworkingApplicationTests {
     }
 
     // 16. Devuelve el nombre del miembro que pagó la reserva de mayor cuantía (precio_hora × horas aplicando el descuento).
+    @Test
+    void consulta16_miembroReservaMayorCuantia(){
+        Optional<Reserva> reservaMayor = reservaRepository.findAll().stream()
+                // Comparamos por el importe de cada reserva: horas * precioHora * (1 - descuentoPct/100)
+                .max(Comparator.comparing(r -> {
+                    BigDecimal descuento = r.getDescuentoPct() != null ? r.getDescuentoPct().divide(new BigDecimal("100")) : BigDecimal.ZERO;
+                    return r.getHoras().multiply(r.getSala().getPrecioHora()).multiply(BigDecimal.ONE.subtract(descuento));
+                }));
+
+        reservaMayor.ifPresent(r -> System.out.println(
+                "Miembro: " + r.getMiembro().getNombre() +
+                        " | Reserva ID: " + r.getId() +
+                        " | Importe: " + r.getHoras().multiply(r.getSala().getPrecioHora())
+                        .multiply(BigDecimal.ONE.subtract(
+                                r.getDescuentoPct() != null ? r.getDescuentoPct().divide(new BigDecimal("100")) : BigDecimal.ZERO
+                        ))
+        ));
+    }
     // 17. Devuelve los nombres de los miembros que hayan coincidido en alguna reserva con la miembro Ana Beltrán
     // (misma sala y fecha con solape horario).
+    @Test
+    void consulta17_miembrosCoincidentesConAnaBeltran() {
+
+        // Obtenemos todos los miembros de la base de datos
+        List<Miembro> todos = miembroRepository.findAll();
+
+        // Buscamos a Ana Beltrán por su nombre (ignora mayúsculas/minúsculas)
+        Optional<Miembro> ana = todos.stream()
+                .filter(m -> m.getNombre().equalsIgnoreCase("Ana Beltrán"))
+                .findFirst();
+
+        // Si no se encuentra a Ana, salimos del test
+        if (ana.isEmpty()) {
+            System.out.println("No se encontró a Ana Beltrán");
+            return;
+        }
+
+        // Convertimos el set de reservas de Ana a una lista para poder iterar con streams
+        List<Reserva> reservasAna = new ArrayList<>(ana.get().getReservas());
+
+        // Filtramos los miembros que hayan coincidido con Ana en alguna reserva
+        List<String> miembrosCoincidentes = todos.stream()
+                // Excluimos a Ana
+                .filter(m -> !m.equals(ana.get()))
+                // Comprobamos si alguna de sus reservas coincide con alguna reserva de Ana
+                .filter(m -> m.getReservas().stream()
+                        .anyMatch(r -> reservasAna.stream()
+                                .anyMatch(ra -> ra.getSala().equals(r.getSala())
+                                        && ra.getFecha().equals(r.getFecha())
+                                        // Comprobamos si hay solape en el horario
+                                        && ra.getHoraInicio().isBefore(r.getHoraFin())
+                                        && ra.getHoraFin().isAfter(r.getHoraInicio())
+                                )
+                        )
+                )
+                // Obtenemos solo los nombres de los miembros coincidentes
+                .map(Miembro::getNombre)
+                // Evitamos nombres repetidos si coinciden varias veces
+                .distinct()
+                .toList();
+
+        // Mostramos los resultados por consola
+        miembrosCoincidentes.forEach(System.out::println);
+    }
+
     // 18. Devuelve el total de lo ingresado por el coworking en reservas para el mes de enero de 2025.
+    @Test
+    void consulta18_totalIngresosEnero2025() {
+
+        BigDecimal total = reservaRepository.findAll().stream()
+                // Filtramos reservas de enero de 2025
+                .filter(r -> r.getFecha() != null &&
+                        r.getFecha().getYear() == 2025 &&
+                        r.getFecha().getMonthValue() == 1)
+                // Calculamos el importe de cada reserva
+                .map(r -> {
+                    BigDecimal precioHora = r.getSala().getPrecioHora();
+                    BigDecimal horas = r.getHoras() != null ? r.getHoras() : BigDecimal.ZERO;
+                    BigDecimal descuento = r.getDescuentoPct() != null ? r.getDescuentoPct() : BigDecimal.ZERO;
+                    BigDecimal factor = BigDecimal.ONE.subtract(descuento.divide(new BigDecimal("100")));
+                    return precioHora.multiply(horas).multiply(factor);
+                })
+                // Sumamos todos los importes
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        System.out.println("Total ingresado en enero 2025: " + total + " €");
+    }
+
     // 19. Devuelve el conteo de cuántos miembros tienen la observación 'Requiere equipamiento especial' en alguna de sus reservas.
+    @Test
+    void consulta19_miembrosConObservacion() {
+
+        long count = miembroRepository.findAll().stream()
+                // Filtramos miembros que tengan al menos una reserva con la observación deseada
+                .filter(m -> m.getReservas().stream()
+                        .anyMatch(r -> r.getObservaciones() != null &&
+                                r.getObservaciones().equalsIgnoreCase("Requiere equipamiento especial"))
+                )
+                .count();
+
+        System.out.println("Número de miembros con observación 'Requiere equipamiento especial': " + count);
+    }
+
     // 20. Devuelve cuánto se ingresaría por la sala 'Auditorio Sol' si estuviera reservada durante todo su horario de apertura
     // en un día completo (sin descuentos).
+    @Test
+    void consulta20_ingresoAuditorioSolDiaCompleto() {
+
+        Optional<Sala> auditorio = salaRepository.findAll().stream()
+                .filter(s -> s.getNombre().equalsIgnoreCase("Auditorio Sol"))
+                .findFirst();
+
+        if (auditorio.isPresent()) {
+            Sala sala = auditorio.get();
+
+            // Calculamos horas totales del horario de apertura
+            long segundos = java.time.Duration.between(sala.getApertura(), sala.getCierre()).getSeconds();
+            BigDecimal horas = new BigDecimal(segundos).divide(new BigDecimal("3600"), 2, BigDecimal.ROUND_HALF_UP);
+
+            // Multiplicamos por precio por hora, sin descuentos
+            BigDecimal ingreso = sala.getPrecioHora().multiply(horas);
+
+            System.out.println("Ingreso teórico de 'Auditorio Sol' en un día completo: " + ingreso + " €");
+        } else {
+            System.out.println("No se encontró la sala 'Auditorio Sol'");
+        }
+    }
+
+
 }
