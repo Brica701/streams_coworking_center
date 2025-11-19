@@ -228,13 +228,79 @@ class CoworkingApplicationTests {
     }
     // 11. Devuelve un listado de las salas que empiecen por 'Sala' y terminen por 'o',
     // y también las salas que terminen por 'x'.
+    @Test
+    void consulta11_salasSalaX() {
+        List<Sala> salasSalaX = salaRepository.findAll().stream()
+                // Filtramos las salas que empiecen por 'Sala' y terminen por 'o' o 'x'
+                .filter(s -> (s.getNombre().startsWith("Sala") && s.getNombre().endsWith("o"))
+                        || s.getNombre().endsWith("x"))
+                .toList();
+
+        salasSalaX.forEach(System.out::println);
+    }
+
     // 12. Devuelve un listado que muestre todas las reservas y salas en las que se ha registrado cada miembro.
     // El resultado debe mostrar todos los datos del miembro primero junto con un sublistado de sus reservas y salas.
     // El listado debe mostrar los datos de los miembros ordenados alfabéticamente por nombre.
+    @Test
+    void consulta12_reservasYSalas() {
+        // Obtenemos todos los miembros y los ordenamos por nombre alfabeticamente
+        List<Miembro> miembrosOrdenados = miembroRepository.findAll().stream()
+                .sorted((m1, m2) -> m1.getNombre().compareToIgnoreCase(m2.getNombre()))
+                .toList();
+
+        miembrosOrdenados.forEach(miembro -> {
+            System.out.println("Miembro: " + miembro.getNombre() + ", Email: " + miembro.getEmail() +
+                    ", Teléfono: " + miembro.getTelefono() + ", Empresa: " + miembro.getEmpresa() +
+                    ", Plan: " + miembro.getPlan() + ", Fecha Alta: " + miembro.getFechaAlta());
+
+            // Otro listado de reservas y sus salas con sus datos
+            miembro.getReservas().forEach(reserva -> {
+                System.out.println("  Reserva ID: " + reserva.getId() +
+                        ", Fecha: " + reserva.getFecha() +
+                        ", Sala: " + reserva.getSala().getNombre() +
+                        ", Precio/Hora: " + reserva.getSala().getPrecioHora() +
+                        ", Horas: " + reserva.getHoras());
+            });
+        });
+    }
+
     // 13. Devuelve el total de personas que podrían alojarse simultáneamente en el centro en base al aforo de todas las salas.
+    @Test
+    void consulta13_aforoTotalCentro() {
+        // Sumamos el aforo de todas las salas para ver el total
+        int aforoTotal = salaRepository.findAll().stream()
+                .map(Sala::getAforo)        // obtenemos el aforo de cada sala
+                .filter(aforo -> aforo != null) // evitamos que haya algun null
+                .mapToInt(Integer::intValue)    // convertimos a int para sumar
+                .sum();
+
+        System.out.println("Aforo total del centro: " + aforoTotal + " personas");
+    }
+
     // 14. Calcula el número total de miembros (diferentes) que tienen alguna reserva.
+    @Test
+    void consulta14_miembrosConReserva() {
+        // Filtramos los miembros que tengan al menos una reserva y las contamos
+        long totalMiembrosConReserva = miembroRepository.findAll().stream()
+                .filter(m -> !m.getReservas().isEmpty()) // miembros con reservas
+                .count(); // las contamos para obtener el total
+
+        System.out.println("Número total de miembros con al menos una reserva: " + totalMiembrosConReserva);
+    }
     // 15. Devuelve el listado de las salas para las que se aplica un descuento porcentual (descuento_pct) superior al 10%
     // en alguna de sus reservas.
+    @Test
+    void consulta15_salasCondescuento() {
+        List<Sala> salasConDescuento = salaRepository.findAll().stream()
+                // Filtramos las salas que tengan alguna reserva con un descuento mayor al 10%
+                .filter(sala -> sala.getReservas().stream()
+                        .anyMatch(r -> r.getDescuentoPct() != null && r.getDescuentoPct().compareTo(new BigDecimal("10")) > 0))
+                .toList();
+
+        salasConDescuento.forEach(System.out::println);
+    }
+
     // 16. Devuelve el nombre del miembro que pagó la reserva de mayor cuantía (precio_hora × horas aplicando el descuento).
     // 17. Devuelve los nombres de los miembros que hayan coincidido en alguna reserva con la miembro Ana Beltrán
     // (misma sala y fecha con solape horario).
