@@ -432,5 +432,44 @@ class CoworkingApplicationTests {
         }
     }
 
+    //Streams añadidos
+    //Salas con recursos JSON específicos
+    @Test
+    void extra_salasConSonidoPremium() {
+        var salas = salaRepository.findAll().stream()
+                .filter(s -> s.getRecursos() != null &&
+                        s.getRecursos().toString().contains("\"sonido\":\"premium\""))
+                .toList();
+
+        salas.forEach(System.out::println);
+    }
+
+    //Miembro con más horas reservadas en total
+    @Test
+    void extra_miembroMasHoras() {
+        var top = miembroRepository.findAll().stream()
+                .max(Comparator.comparing(m ->
+                        m.getReservas().stream()
+                                .map(r -> r.getHoras() == null ? BigDecimal.ZERO : r.getHoras())
+                                .reduce(BigDecimal.ZERO, BigDecimal::add)
+                ));
+
+        top.ifPresent(System.out::println);
+    }
+
+    //Días con mayor ocupación total
+    @Test
+    void extra_diaMayorOcupacion() {
+        var resultado = reservaRepository.findAll().stream()
+                .collect(Collectors.groupingBy(
+                        Reserva::getFecha,
+                        Collectors.summingInt(r -> r.getAsistentes() == null ? 0 : r.getAsistentes())
+                ))
+                .entrySet().stream()
+                .max(Comparator.comparingInt(e -> e.getValue()));
+
+        resultado.ifPresent(System.out::println);
+    }
+
 
 }
